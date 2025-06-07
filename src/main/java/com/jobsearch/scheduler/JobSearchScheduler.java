@@ -26,6 +26,7 @@ public class JobSearchScheduler {
     private final JSearchService jSearchService;
     private final JobMatchingService jobMatchingService;
     private final EmailService emailService;
+    private final JobDuplicateService jobDuplicateService;
 
     @Scheduled(fixedRateString = "${job.scheduler.fixed-rate:3600000}")
     public void searchJobsForAllAlerts() {
@@ -104,11 +105,19 @@ public class JobSearchScheduler {
 
                 User user = getUserFromAlert(alertResponse);
                 if (user != null && user.getEmail() != null && !user.getEmail().trim().isEmpty()) {
-                    try {
-                        emailService.sendJobAlertEmail(user, matchedJobs, alertResponse.getTitle());
-                        log.info("Email enviado com sucesso para: {}", user.getEmail());
-                    } catch (Exception emailError) {
-                        log.error("Erro ao enviar email para {}: {}", user.getEmail(), emailError.getMessage());
+
+                    List<JobVacancy> newJobs = jobDuplicateService.filterAlreadySentJobs(user, matchedJobs);
+
+                    if (!newJobs.isEmpty()) {
+                        try {
+                            emailService.sendJobAlertEmail(user, newJobs, alertResponse.getTitle());
+                            jobDuplicateService.markJobsAsSent(user, newJobs, alertResponse.getTitle());
+                            log.info("Email enviado com {} vagas novas para: {}", newJobs.size(), user.getEmail());
+                        } catch (Exception emailError) {
+                            log.error("Erro ao enviar email para {}: {}", user.getEmail(), emailError.getMessage());
+                        }
+                    } else {
+                        log.info("Todas as vagas já foram enviadas anteriormente para usuário: {}", user.getEmail());
                     }
                 } else {
                     log.warn("Usuário não encontrado ou email inválido para alerta: {}", alertResponse.getId());

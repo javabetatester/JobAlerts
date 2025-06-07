@@ -4,6 +4,8 @@ import com.jobsearch.dto.JobAlertDTO;
 import com.jobsearch.entity.AlertTag;
 import com.jobsearch.entity.JobAlert;
 import com.jobsearch.entity.User;
+import com.jobsearch.exception.JobAlertNotFoundException;
+import com.jobsearch.exception.UserNotFoundException;
 import com.jobsearch.repository.AlertTagRepository;
 import com.jobsearch.repository.JobAlertRepository;
 import com.jobsearch.repository.UserRepository;
@@ -27,7 +29,7 @@ public class JobAlertService {
     @Transactional
     public JobAlertDTO.JobAlertResponse createJobAlert(Long userId, JobAlertDTO.CreateJobAlertRequest request) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
+                .orElseThrow(() -> new UserNotFoundException("Usuário não encontrado com ID: " + userId));
 
         JobAlert jobAlert = new JobAlert();
         jobAlert.setTitle(request.getTitle());
@@ -65,7 +67,7 @@ public class JobAlertService {
 
     public JobAlertDTO.JobAlertResponse getJobAlertById(Long alertId) {
         JobAlert alert = jobAlertRepository.findById(alertId)
-                .orElseThrow(() -> new RuntimeException("Alerta não encontrado"));
+                .orElseThrow(() -> new JobAlertNotFoundException("Alerta não encontrado com ID: " + alertId));
         return mapToResponse(alert);
     }
 
@@ -121,6 +123,11 @@ public class JobAlertService {
                 .orElseThrow(() -> new RuntimeException("Alerta não encontrado"));
         alert.setLastChecked(LocalDateTime.now());
         jobAlertRepository.save(alert);
+    }
+
+    public JobAlert getJobAlertEntityById(Long alertId) {
+        return jobAlertRepository.findById(alertId)
+                .orElseThrow(() -> new JobAlertNotFoundException("Alerta não encontrado com ID: " + alertId));
     }
 
     private JobAlertDTO.JobAlertResponse mapToResponse(JobAlert alert) {

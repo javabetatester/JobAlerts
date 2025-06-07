@@ -1,17 +1,19 @@
 package com.jobsearch.repository;
 
-import com.jobsearch.entity.AlertTag;
+import com.jobsearch.entity.JobVacancy;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
-public interface AlertTagRepository extends JpaRepository<AlertTag, Long> {
+public interface JobVacancyRepository extends JpaRepository<JobVacancy, Long> {
 
-    List<AlertTag> findByJobAlertId(Long jobAlertId);
+    Optional<JobVacancy> findByExternalId(String externalId);
 
-    List<AlertTag> findByJobAlertIdAndIsRequiredTrue(Long jobAlertId);
+    boolean existsByExternalId(String externalId);
 
-    void deleteByJobAlertId(Long jobAlertId);
+    List<JobVacancy> findByCreatedAtAfter(LocalDateTime dateTime);
 }

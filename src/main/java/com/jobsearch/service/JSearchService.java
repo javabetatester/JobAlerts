@@ -55,26 +55,25 @@ public class JSearchService {
         try {
             WebClient webClient = webClientBuilder.build();
 
-            String fullQuery = query;
-            if (location != null && !location.isEmpty()) {
-                fullQuery += " in " + location;
-            }
+            final String searchQuery = buildSearchQuery(query, location);
+            final String finalEmploymentType = employmentType;
+            final Integer finalPage = page != null ? page : 1;
 
             Mono<JSearchDTO.JobSearchResponse> response = webClient.get()
                     .uri(uriBuilder -> {
-                        uriBuilder = uriBuilder
+                        var builder = uriBuilder
                                 .scheme("https")
                                 .host(apiHost)
                                 .path("/search")
-                                .queryParam("query", fullQuery)
-                                .queryParam("page", page != null ? page : 1)
+                                .queryParam("query", searchQuery)
+                                .queryParam("page", finalPage)
                                 .queryParam("num_pages", 1);
 
-                        if (employmentType != null && !employmentType.isEmpty()) {
-                            uriBuilder.queryParam("employment_types", employmentType);
+                        if (finalEmploymentType != null && !finalEmploymentType.isEmpty()) {
+                            builder = builder.queryParam("employment_types", finalEmploymentType);
                         }
 
-                        return uriBuilder.build();
+                        return builder.build();
                     })
                     .header("X-RapidAPI-Key", apiKey)
                     .header("X-RapidAPI-Host", apiHost)
@@ -87,5 +86,13 @@ public class JSearchService {
             log.error("Erro ao buscar vagas com filtros no JSearch: ", e);
             throw new RuntimeException("Erro ao buscar vagas", e);
         }
+    }
+
+    private String buildSearchQuery(String query, String location) {
+        String fullQuery = query;
+        if (location != null && !location.isEmpty()) {
+            fullQuery += " in " + location;
+        }
+        return fullQuery;
     }
 }

@@ -2,6 +2,8 @@ package com.jobsearch.service;
 
 import com.jobsearch.dto.UserDTO;
 import com.jobsearch.entity.User;
+import com.jobsearch.exception.EmailAlreadyExistsException;
+import com.jobsearch.exception.UserNotFoundException;
 import com.jobsearch.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -19,7 +21,7 @@ public class UserService {
     @Transactional
     public UserDTO.UserResponse createUser(UserDTO.CreateUserRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email já cadastrado");
+            throw new EmailAlreadyExistsException("Email já cadastrado: " + request.getEmail());
         }
 
         User user = new User();
@@ -32,13 +34,13 @@ public class UserService {
 
     public UserDTO.UserResponse getUserById(Long id) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
+                .orElseThrow(() -> new UserNotFoundException("Usuário não encontrado com ID: " + id));
         return mapToResponse(user);
     }
 
     public UserDTO.UserResponse getUserByEmail(String email) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
+                .orElseThrow(() -> new UserNotFoundException("Usuário não encontrado com email: " + email));
         return mapToResponse(user);
     }
 
@@ -51,7 +53,7 @@ public class UserService {
     @Transactional
     public void deactivateUser(Long id) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
+                .orElseThrow(() -> new UserNotFoundException("Usuário não encontrado com ID: " + id));
         user.setIsActive(false);
         userRepository.save(user);
     }

@@ -109,6 +109,8 @@ public class JobAlertService {
         return mapToResponse(updatedAlert);
     }
 
+
+
     @Transactional
     public void deactivateJobAlert(Long alertId) {
         JobAlert alert = jobAlertRepository.findById(alertId)
@@ -126,8 +128,18 @@ public class JobAlertService {
     }
 
     public JobAlert getJobAlertEntityById(Long alertId) {
-        return jobAlertRepository.findById(alertId)
+        JobAlert alert = jobAlertRepository.findById(alertId)
                 .orElseThrow(() -> new JobAlertNotFoundException("Alerta não encontrado com ID: " + alertId));
+
+        // Force lazy loading of user and tags
+        if (alert.getUser() != null) {
+            alert.getUser().getName(); // Force load
+        }
+        if (alert.getAlertTags() != null) {
+            alert.getAlertTags().size(); // Force load
+        }
+
+        return alert;
     }
 
     private JobAlertDTO.JobAlertResponse mapToResponse(JobAlert alert) {

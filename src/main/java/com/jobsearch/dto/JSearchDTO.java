@@ -89,14 +89,6 @@ public class JSearchDTO {
         private String jobSalaryPeriod;
         @JsonProperty("job_highlights")
         private JobHighlights jobHighlights;
-        @JsonProperty("job_job_title")
-        private String jobJobTitle;
-        @JsonProperty("job_posting_language")
-        private String jobPostingLanguage2;
-        @JsonProperty("job_onet_soc")
-        private String jobOnetSoc2;
-        @JsonProperty("job_onet_job_zone")
-        private String jobOnetJobZone2;
     }
 
     @Data

@@ -65,10 +65,34 @@ public class JobAlert {
     }
 
     public enum LocationType {
-        REMOTE, HYBRID, ONSITE, ANY
+        REMOTO,
+        HIBRIDO,
+        PRESENCIAL,
+        QUALQUER,
+        REMOTE,
+        HYBRID,
+        ONSITE,
+        ANY
     }
 
     public enum ExperienceLevel {
-        ENTRY_LEVEL, MID_LEVEL, SENIOR_LEVEL, EXECUTIVE, ANY
+        ESTAGIARIO,
+        JR,
+        JUNIOR,
+        PL,
+        PLENO,
+        SR,
+        SENIOR,
+        ESPECIALISTA,
+        LEAD,
+        COORDENADOR,
+        GERENTE,
+        DIRETOR,
+        ENTRY_LEVEL,
+        MID_LEVEL,
+        SENIOR_LEVEL,
+        EXECUTIVE,
+        ANY,
+        QUALQUER
     }
 }

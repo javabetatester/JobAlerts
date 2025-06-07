@@ -2,7 +2,6 @@ package com.jobsearch.scheduler;
 
 import com.jobsearch.dto.JSearchDTO;
 import com.jobsearch.dto.JobAlertDTO;
-import com.jobsearch.dto.UserDTO;
 import com.jobsearch.entity.JobAlert;
 import com.jobsearch.entity.JobVacancy;
 import com.jobsearch.entity.User;
@@ -14,6 +13,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Collections;
 
 @Component
 @RequiredArgsConstructor
@@ -55,76 +55,162 @@ public class JobSearchScheduler {
         log.debug("Processando alerta: {} - {}", alertResponse.getId(), alertResponse.getTitle());
 
         try {
-            JobAlert jobAlert = convertToJobAlert(alertResponse);
+            if (alertResponse.getSearchQuery() == null || alertResponse.getSearchQuery().trim().isEmpty()) {
+                log.warn("Alerta {} tem query de busca vazia, pulando...", alertResponse.getId());
+                return;
+            }
+
+            if (alertResponse.getLocation() == null || alertResponse.getLocation().trim().isEmpty()) {
+                log.warn("Alerta {} tem localização vazia, pulando...", alertResponse.getId());
+                return;
+            }
+
+            log.debug("Buscando vagas para query: '{}' em: '{}'",
+                    alertResponse.getSearchQuery(), alertResponse.getLocation());
 
             JSearchDTO.JobSearchResponse searchResponse = jSearchService.searchJobsWithFilters(
-                    alertResponse.getSearchQuery(),
-                    alertResponse.getLocation(),
+                    alertResponse.getSearchQuery().trim(),
+                    alertResponse.getLocation().trim(),
                     null,
                     1
             );
 
-            List<JobVacancy> matchedJobs = jobMatchingService.processAndMatchJobs(searchResponse, jobAlert);
-
-            if (!matchedJobs.isEmpty()) {
-                log.info("Encontradas {} vagas para alerta: {}", matchedJobs.size(), alertResponse.getTitle());
-
-                User user = getUserFromAlert(alertResponse);
-                if (user != null) {
-                    emailService.sendJobAlertEmail(user, matchedJobs, alertResponse.getTitle());
-                    log.info("Email enviado para: {}", user.getEmail());
-                } else {
-                    log.warn("Usuário não encontrado para alerta: {}", alertResponse.getId());
-                }
-
+            if (searchResponse == null) {
+                log.warn("Resposta da API JSearch é null para alerta: {}", alertResponse.getId());
                 jobAlertService.updateLastChecked(alertResponse.getId());
-            } else {
-                log.debug("Nenhuma vaga nova encontrada para alerta: {}", alertResponse.getTitle());
-                jobAlertService.updateLastChecked(alertResponse.getId());
+                return;
             }
 
+            if (searchResponse.getData() == null || searchResponse.getData().isEmpty()) {
+                log.info("Nenhuma vaga encontrada na API para alerta: {}", alertResponse.getTitle());
+                jobAlertService.updateLastChecked(alertResponse.getId());
+                return;
+            }
+
+            log.info("API retornou {} vagas para alerta: {}",
+                    searchResponse.getData().size(), alertResponse.getTitle());
+
+            JobAlert jobAlert = convertToJobAlert(alertResponse);
+            if (jobAlert == null) {
+                log.error("Erro ao converter JobAlertResponse para JobAlert - ID: {}", alertResponse.getId());
+                return;
+            }
+
+            List<JobVacancy> matchedJobs = jobMatchingService.processAndMatchJobs(searchResponse, jobAlert);
+
+            if (matchedJobs != null && !matchedJobs.isEmpty()) {
+                log.info("Encontradas {} vagas correspondentes para alerta: {}",
+                        matchedJobs.size(), alertResponse.getTitle());
+
+                User user = getUserFromAlert(alertResponse);
+                if (user != null && user.getEmail() != null && !user.getEmail().trim().isEmpty()) {
+                    try {
+                        emailService.sendJobAlertEmail(user, matchedJobs, alertResponse.getTitle());
+                        log.info("Email enviado com sucesso para: {}", user.getEmail());
+                    } catch (Exception emailError) {
+                        log.error("Erro ao enviar email para {}: {}", user.getEmail(), emailError.getMessage());
+                    }
+                } else {
+                    log.warn("Usuário não encontrado ou email inválido para alerta: {}", alertResponse.getId());
+                }
+            } else {
+                log.debug("Nenhuma vaga nova encontrada para alerta: {}", alertResponse.getTitle());
+            }
+
+            jobAlertService.updateLastChecked(alertResponse.getId());
+
         } catch (Exception e) {
-            log.error("Erro ao buscar vagas para alerta {}: {}", alertResponse.getId(), e.getMessage());
+            log.error("Erro detalhado ao processar alerta {}: {}", alertResponse.getId(), e.getMessage(), e);
+            try {
+                jobAlertService.updateLastChecked(alertResponse.getId());
+            } catch (Exception updateError) {
+                log.error("Erro ao atualizar lastChecked para alerta {}: {}",
+                        alertResponse.getId(), updateError.getMessage());
+            }
         }
     }
 
     private User getUserFromAlert(JobAlertDTO.JobAlertResponse alertResponse) {
         try {
+            if (alertResponse == null || alertResponse.getId() == null) {
+                log.error("AlertResponse ou ID é null");
+                return null;
+            }
+
             JobAlert fullAlert = jobAlertService.getJobAlertEntityById(alertResponse.getId());
+            if (fullAlert == null) {
+                log.error("JobAlert não encontrado para ID: {}", alertResponse.getId());
+                return null;
+            }
+
             User user = fullAlert.getUser();
+            if (user == null) {
+                log.error("Usuário é null para alerta ID: {}", alertResponse.getId());
+                return null;
+            }
+
+            log.debug("Usuário encontrado: {} ({})", user.getName(), user.getEmail());
             return user;
+
         } catch (Exception e) {
-            log.error("Erro ao buscar usuário do alerta {}: {}", alertResponse.getId(), e.getMessage());
+            log.error("Erro ao buscar usuário do alerta {}: {}", alertResponse.getId(), e.getMessage(), e);
             return null;
         }
     }
 
     private JobAlert convertToJobAlert(JobAlertDTO.JobAlertResponse alertResponse) {
-        JobAlert jobAlert = new JobAlert();
-        jobAlert.setId(alertResponse.getId());
-        jobAlert.setTitle(alertResponse.getTitle());
-        jobAlert.setSearchQuery(alertResponse.getSearchQuery());
-        jobAlert.setLocation(alertResponse.getLocation());
-        jobAlert.setLocationType(alertResponse.getLocationType());
-        jobAlert.setExperienceLevel(alertResponse.getExperienceLevel());
-        jobAlert.setMinimumMatchingTags(alertResponse.getMinimumMatchingTags());
-        jobAlert.setIsActive(alertResponse.getIsActive());
-        jobAlert.setCreatedAt(alertResponse.getCreatedAt());
-        jobAlert.setLastChecked(alertResponse.getLastChecked());
+        try {
+            if (alertResponse == null) {
+                log.error("AlertResponse é null");
+                return null;
+            }
 
-        if (alertResponse.getTags() != null) {
-            jobAlert.setAlertTags(alertResponse.getTags().stream()
-                    .map(tagResponse -> {
-                        com.jobsearch.entity.AlertTag alertTag = new com.jobsearch.entity.AlertTag();
-                        alertTag.setId(tagResponse.getId());
-                        alertTag.setTag(tagResponse.getTag());
-                        alertTag.setIsRequired(tagResponse.getIsRequired());
-                        alertTag.setJobAlert(jobAlert);
-                        return alertTag;
-                    })
-                    .collect(java.util.Set::of, java.util.Set::add, java.util.Set::addAll));
+            JobAlert jobAlert = new JobAlert();
+            jobAlert.setId(alertResponse.getId());
+            jobAlert.setTitle(alertResponse.getTitle());
+            jobAlert.setSearchQuery(alertResponse.getSearchQuery());
+            jobAlert.setLocation(alertResponse.getLocation());
+            jobAlert.setLocationType(alertResponse.getLocationType());
+            jobAlert.setExperienceLevel(alertResponse.getExperienceLevel());
+            jobAlert.setMinimumMatchingTags(alertResponse.getMinimumMatchingTags() != null ?
+                    alertResponse.getMinimumMatchingTags() : 1);
+            jobAlert.setIsActive(alertResponse.getIsActive() != null ? alertResponse.getIsActive() : true);
+            jobAlert.setCreatedAt(alertResponse.getCreatedAt());
+            jobAlert.setLastChecked(alertResponse.getLastChecked());
+
+            if (alertResponse.getTags() != null && !alertResponse.getTags().isEmpty()) {
+                try {
+                    java.util.Set<com.jobsearch.entity.AlertTag> alertTags = alertResponse.getTags().stream()
+                            .filter(tagResponse -> tagResponse != null && tagResponse.getTag() != null)
+                            .map(tagResponse -> {
+                                com.jobsearch.entity.AlertTag alertTag = new com.jobsearch.entity.AlertTag();
+                                alertTag.setId(tagResponse.getId());
+                                alertTag.setTag(tagResponse.getTag());
+                                alertTag.setIsRequired(tagResponse.getIsRequired() != null ?
+                                        tagResponse.getIsRequired() : false);
+                                alertTag.setJobAlert(jobAlert);
+                                return alertTag;
+                            })
+                            .collect(java.util.stream.Collectors.toSet());
+
+                    jobAlert.setAlertTags(alertTags);
+                    log.debug("Convertidas {} tags para alerta {}", alertTags.size(), alertResponse.getId());
+                } catch (Exception tagError) {
+                    log.error("Erro ao converter tags para alerta {}: {}",
+                            alertResponse.getId(), tagError.getMessage());
+                    jobAlert.setAlertTags(Collections.emptySet());
+                }
+            } else {
+                log.debug("Alerta {} não possui tags", alertResponse.getId());
+                jobAlert.setAlertTags(Collections.emptySet());
+            }
+
+            return jobAlert;
+
+        } catch (Exception e) {
+            log.error("Erro ao converter JobAlertResponse para JobAlert - ID: {}, Erro: {}",
+                    alertResponse != null ? alertResponse.getId() : "null", e.getMessage(), e);
+            return null;
         }
-
-        return jobAlert;
     }
 }
